@@ -1,0 +1,18 @@
+{
+	"scripts": {
+		"test": "node --trace-sigint --enable-source-maps dist/run-tests.js",
+		"prebuild": "node -e \" require('node:fs').rmSync('dist/', {recursive: true, force: true}); \"",
+		"build": "tsc"
+	},
+	"dependencies": {
+		"@types/node": "^22.18.12"
+	},
+	"license": "LGPL-3.0-only",
+	"devDependencies": {
+		"typescript": "^5.0.0"
+	},
+	"engines": {
+		"node": ">=22"
+	},
+	"type": "module"
+}
