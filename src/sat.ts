@@ -45,8 +45,6 @@ export interface SATSolver {
 	 */
 	getAssignmentMap(): (-1 | 0 | 1)[];
 
-	getAssignmentMapDefaulting(defaultingTo: boolean): Map<Term, boolean>;
-
 	/**
 	 * `simplifyClauses(clauses)` returns the given set of clauses "simplified"
 	 * by the current assignment.

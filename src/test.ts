@@ -15,46 +15,74 @@ export interface FailRun {
 	elapsedMillis: number,
 }
 
+export type TestOptions = {
+	testNameFilters?: string[],
+};
+
+function testOptionsIncludeTest(
+	test: { name: string },
+	options: TestOptions | undefined,
+): boolean {
+	if (!options?.testNameFilters?.length) {
+		return true;
+	}
+	return options.testNameFilters.some(filter => test.name.includes(filter));
+}
+
 export class TestRunner {
 	public readonly runs: Run[] = [];
 
-	constructor(private testNameFilters: string[]) { }
+	constructor() { }
 
-	runTest(name: string, body: () => void) {
+	protected beforeStart(_test: { name: string }): void | Promise<void> { }
+	protected afterFinish(_test: { name: string }, _run: Run): void | Promise<void> { }
+
+	async runTest(
+		name: string,
+		body: () => void | Promise<void>,
+		options?: TestOptions,
+	): Promise<void> {
 		if (name.includes(".skip:")) {
 			console.log(`SKIP ${name}`);
 			return;
 		}
-		console.log(`test ${name}...`);
 		Error.stackTraceLimit = 100;
-		let keep = this.testNameFilters.length === 0;
-		for (const filter of this.testNameFilters) {
-			if (name.indexOf(filter) >= 0) {
-				keep = true;
-			}
-		}
-		if (!keep) {
+		if (!testOptionsIncludeTest({ name }, options)) {
 			return;
 		}
+
+		await this.beforeStart({ name });
 
 		const beforeMillis = performance.now();
 		try {
-			body();
+			await body();
 			const elapsedMillis = performance.now() - beforeMillis;
-			this.runs.push({ name, type: "pass", elapsedMillis });
-			return;
+			const run: Run = { name, type: "pass", elapsedMillis };
+			this.runs.push(run);
+			await this.afterFinish({ name }, run);
 		} catch (e) {
 			const elapsedMillis = performance.now() - beforeMillis;
-			this.runs.push({ name, type: "fail", exception: e, elapsedMillis });
+			const run: Run = { name, type: "fail", exception: e, elapsedMillis };
+			this.runs.push(run);
+			await this.afterFinish({ name }, run);
 		}
 	}
 
-	runTests(title: string, obj: { [k: string]: () => void }) {
-		for (let k in obj) {
-			this.runTest(title + "." + k, obj[k]);
+	async runSuite(title: string, suite: Suite): Promise<void> {
+		for (let k in suite) {
+			await this.runTest(title + "." + k, suite[k]);
+		}
+	}
+
+	async runSuites(suites: Record<string, Suite>): Promise<void> {
+		for (let k in suites) {
+			await this.runSuite(k, suites[k]);
 		}
 	}
 }
+
+export type TestBody = () => void | Promise<void>;
+export type Suite = Record<string, TestBody>;
 
 export const spec = Symbol("test-spec");
 
