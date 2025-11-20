@@ -40,6 +40,9 @@ export interface SATSolver {
 	 * `getAssignmentMap()` returns a mapping from terms to their assignments
 	 * (`-1` is negative, `0` is unassigned, and `1` is positive).
 	 *
+	 * Not all terms are necessary assigned a value; a `Term` that is not a key
+	 * of the returned map should be treated as unassigned.
+	 *
 	 * Note that because there is no term `0`, entry `[0]` is not-defined (and
 	 * may not be a number).
 	 */
