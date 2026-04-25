@@ -1,4 +1,4 @@
-import * as sat from "./sat";
+import * as sat from "./sat.ts";
 
 function swap<T>(array: T[], a: number, b: number) {
 	const t = array[a];

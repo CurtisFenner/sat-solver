@@ -1,5 +1,5 @@
-import { SATSolver } from "./sat.js";
-import { assert } from "./test.js";
+import type { SATSolver } from "./sat.ts";
+import { assert } from "./test.ts";
 
 class Arithmetic {
 	private count = 0;
@@ -9,7 +9,10 @@ class Arithmetic {
 
 	solution: Map<number, 0 | 1> | null = null;
 
-	constructor(private sat: SATSolver) {
+	private sat: SATSolver;
+	constructor(sat: SATSolver) {
+		this.sat = sat;
+
 		const bits = this.vector(2);
 		this.bitZero = bits[0];
 		this.bitOne = bits[1];

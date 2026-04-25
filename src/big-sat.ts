@@ -1,4 +1,4 @@
-import * as sat from "./sat.js";
+import * as sat from "./sat.ts";
 
 type ClauseID = number;
 
@@ -119,8 +119,8 @@ export class BigSATSolver implements sat.SATSolver {
 		for (let clauseIndex = 0; clauseIndex < this.clausesTrue.length; clauseIndex++) {
 			const clauseTrue = this.clausesTrue[clauseIndex];
 			const clauseFalse = this.clausesFalse[clauseIndex];
-			const satisfied = (clauseTrue & this.assignedTrue) | (clauseFalse & this.assignedFalse);
-			if (satisfied !== 0n) {
+			const satisfied = (clauseTrue & this.assignedTrue) !== 0n || (clauseFalse & this.assignedFalse) !== 0n;
+			if (satisfied) {
 				continue;
 			}
 

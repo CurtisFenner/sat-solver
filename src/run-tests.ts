@@ -1,7 +1,7 @@
-import * as bigSat from "./big-sat.js";
-import * as satShiru from "./sat-shiru.js";
-import * as satTests from "./sat-tests.js";
-import * as test from "./test.js";
+import * as bigSat from "./big-sat.ts";
+import * as satShiru from "./sat-shiru.ts";
+import * as satTests from "./sat-tests.ts";
+import * as test from "./test.ts";
 
 const testRunner = new class extends test.TestRunner {
 	protected override beforeStart(test: { name: string; }): void {

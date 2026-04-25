@@ -1,7 +1,6 @@
 {
 	"scripts": {
-		"test": "node --trace-sigint --enable-source-maps dist/run-tests.js",
-		"prebuild": "node -e \" require('node:fs').rmSync('dist/', {recursive: true, force: true}); \"",
+		"test": "node --trace-sigint --enable-source-maps src/run-tests.ts",
 		"build": "tsc"
 	},
 	"dependencies": {
