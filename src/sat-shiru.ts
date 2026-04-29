@@ -1,4 +1,4 @@
-import * as sat from "./sat.ts";
+import type * as sat from "./sat.ts";
 
 function swap<T>(array: T[], a: number, b: number) {
 	const t = array[a];
@@ -155,77 +155,6 @@ export class ShiruSATSolver implements sat.SATSolver {
 	 */
 	getAssignmentMap(): (-1 | 0 | 1)[] {
 		return this.assignments.slice(0);
-	}
-
-	getAssignmentMapDefaulting(defaultingTo: boolean): Map<sat.Term, boolean> {
-		const out = new Map<sat.Term, boolean>();
-		for (let i = 1; i < this.assignments.length; i++) {
-			const assignment = this.assignments[i];
-			out.set(i, (assignment || defaultingTo) === 1);
-		}
-		return out;
-	}
-
-	/**
-	 * `simplifyClauses(clauses)` returns the given set of clauses "simplified"
-	 * by the current assignment.
-	 *
-	 * Only unsatisfied clauses are returned, and only unrefuted literals in
-	 * those clauses are included.
-	 */
-	simplifyClauses(clauses: sat.Literal[][]): sat.Literal[][] {
-		const simplifiedClauses = [];
-		for (const clause of clauses) {
-			const simplifiedClause: sat.Literal[] = [];
-			let hasSatisfied = false;
-			for (const literal of clause) {
-				const term = literal > 0 ? +literal : -literal;
-				const assignment = this.assignments[term];
-				if (assignment === 0) {
-					simplifiedClause.push(literal);
-				} else if (assignment * literal > 0) {
-					hasSatisfied = true;
-					break;
-				}
-			}
-			if (!hasSatisfied) {
-				simplifiedClauses.push(simplifiedClause);
-			}
-		}
-		return simplifiedClauses;
-	}
-
-	/**
-	 * `fastPartialSolve()` partially solves this instance.
-	 *
-	 * `fastPartialSolve()` returns `"unsatisfiable"` if this instance has been
-	 * refuted.
-	 *
-	 * Otherwise, it returns a partial assignment. If this instance is
-	 * satisfiable, this partial assignment is necessarily a subset of any
-	 * satisfying assignment.
-	 *
-	 * This method mutates this SATSolver instance to include new assignments,
-	 * but does not increase the decision level.
-	 *
-	 * **Requires** that the current decision level is zero.
-	 */
-	fastPartialSolve(): sat.SATResult {
-		if (this.decisionLevel !== 0) {
-			throw new Error("SATSolver.fastPartialSolve: requires that the current decision level is 0");
-		}
-
-		const unitLiterals = this.extractUnitClauses();
-		if (unitLiterals === "unsatisfiable") {
-			return "unsatisfiable";
-		}
-
-		const initialConflict = this.propagate(unitLiterals);
-		if (initialConflict !== null) {
-			return "unsatisfiable";
-		}
-
-		return this.getAssignment();
 	}
 
 	/**
@@ -516,7 +445,10 @@ export class ShiruSATSolver implements sat.SATSolver {
 		}
 
 		if (!hasUnassigned) {
-			throw new Error("SATSolver.addClause() requires at least one unassigned literal");
+			throw new Error([
+				`SATSolver.addClause() requires at least one unassigned literal`,
+				`\tgiven ${JSON.stringify(unprocessedClause)}`,
+			].join("\n"));
 		}
 
 		const clauseID = this.clauses.length;

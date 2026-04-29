@@ -1,4 +1,6 @@
-import type { SATSolver } from "./sat.ts";
+import { BigSATSolver } from "./big-sat.ts";
+import { ShiruSATSolver } from "./sat-shiru.ts";
+import type * as sat from "./sat\.ts";
 import { assert } from "./test.ts";
 
 class Arithmetic {
@@ -9,8 +11,8 @@ class Arithmetic {
 
 	solution: Map<number, 0 | 1> | null = null;
 
-	private sat: SATSolver;
-	constructor(sat: SATSolver) {
+	private sat: sat.SATSolver;
+	constructor(sat: sat.SATSolver) {
 		this.sat = sat;
 
 		const bits = this.vector(2);
@@ -151,7 +153,68 @@ class Arithmetic {
 	}
 }
 
-export function tests(factory: () => SATSolver) {
+
+export function differentialTest(p: {
+	underTest: () => sat.SATSolver,
+	oracle: () => sat.SATSolver,
+}, instance: sat.Literal[][]) {
+	const oracle = p.oracle();
+	const underTest = p.underTest();
+	for (const clause of instance) {
+		oracle.initTerms(Math.max(...clause.map(x => Math.abs(x))));
+		oracle.addClause(clause);
+		underTest.addClause(clause);
+	}
+
+	const t0 = performance.now();
+	const oracleAnswer = oracle.solve();
+	const t1 = performance.now();
+
+	const underTestAnswer = underTest.solve();
+	const t2 = performance.now();
+
+	if (oracleAnswer === "unsatisfiable") {
+		assert(underTestAnswer, "is equal to", oracleAnswer);
+	} else {
+		if (underTestAnswer === "unsatisfiable") {
+			throw new Error("underTestAnswer should be satisfiable, but was " + JSON.stringify(underTestAnswer));
+		}
+		for (const literal of underTestAnswer) {
+			assert(
+				{
+					literal,
+					isInteger: Number.isSafeInteger(literal),
+					allAppearancesOfTerm: underTestAnswer.filter(l => Math.abs(l) === Math.abs(literal)),
+				},
+				"is equal to",
+				{
+					literal,
+					isInteger: true,
+					allAppearancesOfTerm: [literal],
+				},
+			);
+		}
+		for (const clause of instance) {
+			assert(
+				{
+					clause,
+					isSatisfied: clause.some(literal => underTestAnswer.includes(literal)),
+					assignment: underTestAnswer,
+				},
+				"is equal to",
+				{
+					clause,
+					isSatisfied: true,
+					assignment: underTestAnswer,
+				},
+			);
+		}
+	}
+
+	console.log((100 * (t2 - t1) / (t2 - t0)).toFixed(1) + "% spent by underTest");
+}
+
+export function tests(factory: () => sat.SATSolver) {
 	return {
 		"simple-satisfiable"() {
 			const sat = factory();
@@ -338,7 +401,7 @@ export function tests(factory: () => SATSolver) {
 				[2, -1, -98],
 				// Learn clause [-1] as a result of the above conflict.
 
-				// Artificially boost the termweight of 1 so that it is the first
+				// Artificially boost the term weight of 1 so that it is the first
 				// decision variable.
 				[1, 31],
 				[1, 32],
@@ -361,4 +424,84 @@ export function tests(factory: () => SATSolver) {
 			assert(Array.isArray(solution), "is equal to", true);
 		},
 	};
+}
+
+function randomLiteralForTerm(n: number): number {
+	return Math.random() < 0.5 ? -n : +n;
+}
+
+function random3CNFInstance({ numTerms, numClauses }: { numTerms: number, numClauses: number }) {
+	if (numTerms !== numTerms || numTerms < 4) {
+		throw new Error("invalid numTerms");
+	} else if (numClauses !== numClauses || numClauses < 1) {
+		throw new Error("invalid numClauses");
+	}
+
+	const clauses = [];
+	for (let i = 0; i < numClauses; i++) {
+		let a = Math.floor(Math.random() * numTerms);
+		let b = a;
+		while (b == a) b = Math.floor(Math.random() * numTerms);
+		let c = b;
+		while (c == a || c == b) c = Math.floor(Math.random() * numTerms);
+
+		const clause = [
+			randomLiteralForTerm(a + 1),
+			randomLiteralForTerm(b + 1),
+			randomLiteralForTerm(c + 1),
+		];
+		clauses.push(clause);
+	}
+
+	return clauses;
+}
+
+function randomHard3SATInstance({ numTerms }: { numTerms: number }) {
+	// The "satisfiability threshold" for 3-sat
+	// (the ratio of clauses to variables where approximately 50% of random instances are satisfiable)
+	// is approximately 4.3, with a lower bound of about 3.5.
+	const ratio = 3.9 + Math.random() * 0.8;
+
+	const numClauses = 1 + Math.floor(numTerms * ratio + 0.5);
+	return random3CNFInstance({ numTerms, numClauses });
+}
+
+export function reducingTests() {
+	const instances: Record<string, sat.Literal[][]> = {
+		// Manually reduced cases
+		"pure-literal-optimization-must-consider-unit-clauses-too": [
+			[1],
+			[-1, -2],
+		],
+		basic: [
+			[1],
+			[-2, 4],
+			[3, -4, -1],
+			[-3, -4],
+			[4, 2],
+		],
+	};
+
+	// Automatically generated cases
+	for (let numTerms = 4; numTerms < 80; numTerms++) {
+		const instance = randomHard3SATInstance({ numTerms });
+		const name = `numTerms=${numTerms}, numClauses=${instance.length}`;
+		instances[name] = instance;
+	}
+
+	const cases: Record<string, () => void> = {};
+	for (const [name, instance] of Object.entries(instances)) {
+		cases[name] = () => {
+			try {
+				differentialTest(
+					{ underTest: () => new BigSATSolver(), oracle: () => new ShiruSATSolver() },
+					instance,
+				);
+			} catch (err) {
+				console.log(JSON.stringify(instance));
+				throw err;
+			}
+		}
+	}
+	return cases;
 }

@@ -17,6 +17,7 @@ const CONSOLE_WIDTH = 120;
 await testRunner.runSuites({
 	ShiruSATSolver: satTests.tests(() => new satShiru.ShiruSATSolver()),
 	BigSATSolver: satTests.tests(() => new bigSat.BigSATSolver()),
+	reducingTests: satTests.reducingTests(),
 });
 
 const passed = testRunner.runs.filter(x => x.type == "pass");

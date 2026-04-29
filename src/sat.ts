@@ -49,32 +49,6 @@ export interface SATSolver {
 	getAssignmentMap(): (-1 | 0 | 1)[];
 
 	/**
-	 * `simplifyClauses(clauses)` returns the given set of clauses "simplified"
-	 * by the current assignment.
-	 *
-	 * Only unsatisfied clauses are returned, and only unrefuted literals in
-	 * those clauses are included.
-	 */
-	simplifyClauses(clauses: Literal[][]): Literal[][];
-
-	/**
-	 * `fastPartialSolve()` partially solves this instance.
-	 *
-	 * `fastPartialSolve()` returns `"unsatisfiable"` if this instance has been
-	 * refuted.
-	 *
-	 * Otherwise, it returns a partial assignment. If this instance is
-	 * satisfiable, this partial assignment is necessarily a subset of any
-	 * satisfying assignment.
-	 *
-	 * This method mutates this SATSolver instance to include new assignments,
-	 * but does not increase the decision level.
-	 *
-	 * **Requires** that the current decision level is zero.
-	 */
-	fastPartialSolve(): SATResult;
-
-	/**
 	 * `solve()` searches for a satisfying assignment (given the current
 	 * partial assignment).
 	 *
@@ -98,6 +72,4 @@ export interface SATSolver {
 	 * literals it contains
 	 */
 	addClause(unprocessedClause: Literal[]): void;
-
-	rollbackToDecisionLevel(level: number): void;
 };
