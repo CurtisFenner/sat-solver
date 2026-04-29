@@ -161,7 +161,8 @@ export function differentialTest(p: {
 	const oracle = p.oracle();
 	const underTest = p.underTest();
 	for (const clause of instance) {
-		oracle.initTerms(Math.max(...clause.map(x => Math.abs(x))));
+		const maximumTerm = Math.max(...clause.map(x => Math.abs(x)));
+		oracle.initTerms(maximumTerm);
 		oracle.addClause(clause);
 		underTest.addClause(clause);
 	}
@@ -210,8 +211,6 @@ export function differentialTest(p: {
 			);
 		}
 	}
-
-	console.log((100 * (t2 - t1) / (t2 - t0)).toFixed(1) + "% spent by underTest");
 }
 
 export function tests(factory: () => sat.SATSolver) {

@@ -56,25 +56,7 @@ type PropagationConflict = {
 	negativeLiteralAntecedent: ClauseID,
 };
 
-/**
- * Solves the satisfiability problem for Boolean formulas in
- * conjunctive-normal-form (CNF, an "and of ors").
- */
-export class ShiruSATSolver implements sat.SATSolver {
-	private clauses: number[][] = [];
-
-	/// `watchedPositive[n]` is the `ClauseID`s that are "watching" the literal
-	/// `+n`.
-	/// A satisfied clauses watches two arbitrary literals within the clause.
-	/// An unsatisfied clauses watches two unfalsified literals within the
-	/// clause.
-	/// Each clause array is continually re-ordered so that a watched literal is
-	/// always one of the first two literals in the clause.
-	private watchedPositive: ClauseID[][] = [];
-
-	/// `watchedNegative[n]`: see `watchedPositive`.
-	private watchedNegative: ClauseID[][] = [];
-
+class TermStatistics {
 	/**
 	 * `positiveLiteralCount[n]` is the number of times term `n` appears
 	 * positively in a clause.
@@ -86,6 +68,87 @@ export class ShiruSATSolver implements sat.SATSolver {
 	 * negatively in a clause.
 	 */
 	private negativeLiteralCount: number[] = [];
+
+	private recencyFactor: number = 1;
+	private cursor: number = 0;
+
+	/**
+	 * A permutation of all of the initialized terms.
+	 *
+	 * Terms which appear earlier in the array should be assigned before terms
+	 * which appear later.
+	 */
+	private ordering: Array<sat.Term> = [];
+
+	private comparator = (termA: number, termB: number) => {
+		const weightA = this.positiveLiteralCount[termA] + this.negativeLiteralCount[termA];
+		const weightB = this.positiveLiteralCount[termB] + this.negativeLiteralCount[termB];
+		return weightB - weightA;
+	};
+
+	initializeTerm(term: sat.Term): void {
+		this.positiveLiteralCount[term] = 0;
+		this.negativeLiteralCount[term] = 0;
+		if (term !== 0) {
+			this.ordering.push(term);
+		}
+	}
+
+	observeClause(clause: sat.Literal[]): void {
+		for (let i = 0; i < clause.length; i++) {
+			const literal = clause[i];
+			if (literal > 0) {
+				this.positiveLiteralCount[+literal] += this.recencyFactor;
+			} else {
+				this.negativeLiteralCount[-literal] += this.recencyFactor;
+			}
+		}
+	}
+
+	suggestDecisionLiteral(): sat.Literal {
+		const decisionTerm = this.ordering[this.cursor];
+		this.cursor += 1;
+		this.cursor %= this.ordering.length;
+
+		const assignment = this.positiveLiteralCount[decisionTerm] < this.negativeLiteralCount[decisionTerm];
+		return assignment ? decisionTerm : -decisionTerm;
+	}
+
+	scaleRecencyFactor(scale: number): void {
+		// Set up state for cVSIDS variable ordering heuristic.
+		// (See "Understanding VSIDS Branching Heuristics in Conflict-Driven
+		// Clause-Learning SAT Solvers")
+		this.recencyFactor *= scale;
+		this.cursor = 0;
+		this.ordering.sort(this.comparator);
+	}
+}
+
+/**
+ * Solves the satisfiability problem for Boolean formulas in
+ * conjunctive-normal-form (CNF, an "and of ors").
+ */
+export class ShiruSATSolver implements sat.SATSolver {
+	private clauses: number[][] = [];
+
+	/**
+	 * `watchedPositive[n]` are the `ClauseID`s which are "watching" the literal
+	 * `+n`.
+	 *
+	 * A satisfied clause watches two arbitrary literals within the clause.
+	 *
+	 * An unsatisfied clause watches two unfalsified literals within the clause.
+	 *
+	 * Each `clauses[k]` array-of-literals is continually re-ordered so that at
+	 * least 1 watched literal is always
+	 * in index `clauses[k][0]` or `clauses[k][1]`.
+	 */
+	private watchedPositive: ClauseID[][] = [];
+
+	/** @see {@link watchedPositive} */
+	private watchedNegative: ClauseID[][] = [];
+
+	private termStatistics = new TermStatistics();
 
 	/**
 	 * `assignments[n]` is the assignment of term `n`.
@@ -107,9 +170,13 @@ export class ShiruSATSolver implements sat.SATSolver {
 	/// have been made.
 	private decisionLevel: number = 0;
 
-	/// `termDecisionLevel[t]` is the decision level at the time term `t` was
-	/// given an assignment.
-	/// (It is not-defined for unassigned terms)
+	/**
+	 * `termDecisionLevel[t]` is the decision level at the time term `t` was
+	 * given an assignment.
+	 *
+	 * If term `t` is not currently assigned, the value is not defined to be
+	 * any particular value.
+	 */
 	private termDecisionLevel: number[] = [];
 
 	/**
@@ -134,27 +201,15 @@ export class ShiruSATSolver implements sat.SATSolver {
 			this.antecedentClause[i] = 0;
 			this.watchedPositive[i] = [];
 			this.watchedNegative[i] = [];
-			this.positiveLiteralCount[i] = 0;
-			this.negativeLiteralCount[i] = 0;
+			this.termStatistics.initializeTerm(i);
 		}
 	}
 
 	/**
 	 * @returns the current (partial) assignment stack as an array of `Literal`s
 	 */
-	getAssignment() {
+	getAssignmentStack() {
 		return this.assignmentStack.slice(0);
-	}
-
-	/**
-	 * `getAssignmentMap()` returns a mapping from terms to their assignments
-	 * (`-1` is negative, `0` is unassigned, and `1` is positive).
-	 *
-	 * Note that because there is no term `0`, entry `[0]` is not-defined (and
-	 * may not be a number).
-	 */
-	getAssignmentMap(): (-1 | 0 | 1)[] {
-		return this.assignments.slice(0);
 	}
 
 	/**
@@ -187,47 +242,15 @@ export class ShiruSATSolver implements sat.SATSolver {
 			return "unsatisfiable";
 		}
 
-		// Define an initial ordering for the terms. A consistent ordering of
-		// terms means larger benefits from learned clauses.
-		let ordering = [];
-		for (let i = 1; i < this.assignments.length; i++) {
-			ordering[i - 1] = i;
-		}
-
-		// Set up state for cVSIDS variable ordering heuristic.
-		// (See "Understanding VSIDS Branching Heuristics in Conflict-Driven
-		// Clause-Learning SAT Solvers")
-		let termWeights: number[] = [];
-		for (let i = 0; i < this.assignmentStackPosition.length; i++) {
-			termWeights.push(0);
-		}
-		for (let clause of this.clauses) {
-			if (clause.length < 2) {
-				continue;
-			}
-
-			// The initial number of occurrences of a variable is a very rough
-			// indication of the "centrality" of the variable.
-			for (let literal of clause) {
-				let term = literal > 0 ? literal : -literal;
-				termWeights[term] += 1;
-			}
-		}
-
-		const termWeightComparator = (termA: number, termB: number) => {
-			return termWeights[termB] - termWeights[termA];
-		};
-		ordering.sort(termWeightComparator);
-
 		// Start the main CDCL loop.
 		// Repeat assignments until an assignment has been made to every term.
-		let cursor = 0;
 		const termCount = this.assignments.length - 1;
 		while (this.assignmentStack.length < termCount) {
-			const decisionTerm = ordering[cursor];
-			cursor += 1;
-			cursor %= ordering.length;
-
+			// Use a heuristic to suggest a decision literal.
+			const decisionLiteral = this.termStatistics.suggestDecisionLiteral();
+			const decisionTerm = decisionLiteral > 0
+				? decisionLiteral
+				: -decisionLiteral;
 			if (this.assignments[decisionTerm] !== 0) {
 				// This variable has already been assigned.
 				continue;
@@ -236,11 +259,6 @@ export class ShiruSATSolver implements sat.SATSolver {
 			if (unitLiterals.size() !== 0) {
 				throw new Error("invariant violation");
 			}
-
-			// Use a heuristic to determine which assignment to use.
-			const decisionLiteral = this.positiveLiteralCount[decisionTerm] < this.negativeLiteralCount[decisionTerm]
-				? +decisionTerm
-				: -decisionTerm;
 
 			// Enqueue a free decision.
 			this.decisionLevel += 1;
@@ -271,26 +289,13 @@ export class ShiruSATSolver implements sat.SATSolver {
 				unitLiterals.clear();
 				unitLiterals.pushOrFindConflict(assertingLiteral, conflictClauseID);
 
-				// Use "cVSIDS" strategy for clause ordering.
-				for (const literal of conflictClause) {
-					const term = literal > 0 ? +literal : -literal;
-					termWeights[term] += 1;
-				}
-				for (let i = 0; i < termWeights.length; i++) {
-					termWeights[i] *= 0.99;
-				}
-				ordering.sort(termWeightComparator);
-
-				// Ensure that variables are assigned in the same order.
-				// This means that subsequent conflicts are in the same
-				// "area" of the search space, and compound on each other.
-				cursor = 0;
+				this.termStatistics.scaleRecencyFactor(1.01);
 
 				// Continue in the unit-propagation loop.
 			}
 		}
 
-		return this.getAssignment();
+		return this.getAssignmentStack();
 	}
 
 	/**
@@ -435,14 +440,7 @@ export class ShiruSATSolver implements sat.SATSolver {
 			}
 		}
 
-		for (let i = 0; i < clause.length; i++) {
-			const literal = clause[i];
-			if (literal > 0) {
-				this.positiveLiteralCount[+literal] += 1;
-			} else {
-				this.negativeLiteralCount[-literal] += 1;
-			}
-		}
+		this.termStatistics.observeClause(clause);
 
 		if (!hasUnassigned) {
 			throw new Error([
@@ -595,6 +593,8 @@ export class ShiruSATSolver implements sat.SATSolver {
 		const assignedTerm = assignedLiteral > 0 ? assignedLiteral : -assignedLiteral;
 		if (this.assignments[assignedTerm] !== 0) {
 			throw new Error("SATSolver.assign() requires literal is not already assigned");
+		} else if (assignedLiteral === 0) {
+			throw new Error("SATSolver.assign(): assignedLiteral must not be 0");
 		}
 
 		const watchers = assignedLiteral > 0 ? this.watchedNegative[assignedTerm] : this.watchedPositive[assignedTerm];
@@ -629,8 +629,8 @@ export class ShiruSATSolver implements sat.SATSolver {
 			const destination = watchingClause[0] === -assignedLiteral ? 0 : 1;
 
 			// As an optimization, try to prevent more useless wake-ups by
-			// swapping this watch with an earlier assigned that satisfied the
-			// clause.
+			// swapping this watch with an earlier assigned literal
+			// which satisfied the clause.
 			if (satisfiedIndex >= 0) {
 				if (satisfiedIndex <= 1) {
 					// There are no unwatched satisfied literals in this clause,
@@ -770,6 +770,10 @@ export class ShiruSATSolver implements sat.SATSolver {
 		return conflictClause;
 	}
 
+	/**
+	 * **Modifies** the current assignment, by removing all literal assignments
+	 *   with a "decision level" strictly higher than the `level` parameter
+	 */
 	rollbackToDecisionLevel(level: number) {
 		while (this.decisionLevel > level && this.assignmentStack.length > 0) {
 			this.popAssignment();

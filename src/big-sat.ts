@@ -95,7 +95,7 @@ export class BigSATSolver implements sat.SATSolver {
 		}
 	}
 
-	getAssignment(): sat.Literal[] {
+	getAssignmentStack(): sat.Literal[] {
 		const map = this.getAssignmentMap();
 		const assignmentLiterals = [];
 		for (let term = 1; term < map.length; term++) {
@@ -281,7 +281,7 @@ export class BigSATSolver implements sat.SATSolver {
 				continue;
 			} else if (scan.mixedUnfalsifiedTerms === 0n) {
 				// All clauses are satisfied by the current assignment.
-				return this.getAssignment();
+				return this.getAssignmentStack();
 			}
 			initialUnitClauses = scan.unitClauses;
 			break;
@@ -300,7 +300,7 @@ export class BigSATSolver implements sat.SATSolver {
 				const decisionLiteral = this.makeDecision();
 				if (!decisionLiteral) {
 					// All terms are already assigned.
-					return this.getAssignment();
+					return this.getAssignmentStack();
 				}
 				this.assignmentDecisionLast += 1;
 				const decisionTerm = decisionLiteral > 0 ? decisionLiteral : -decisionLiteral;
@@ -356,6 +356,7 @@ export class BigSATSolver implements sat.SATSolver {
 
 		const terms = this.termWeights
 			.map((weight, term) => ({ weight, term }))
+			.filter(({ term }) => term > 0)
 			.sort((a, b) => b.weight - a.weight);
 		for (const { term } of terms) {
 			const termBit = 1n << BigInt(term);
