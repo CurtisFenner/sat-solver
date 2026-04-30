@@ -227,7 +227,7 @@ export class ShiruSATSolver implements sat.SATSolver {
 		if (this.decisionLevel > 0) {
 			throw new Error("SATSolver.solve() requires decision level must be at 0");
 		} else if (this.assignments.length === 0) {
-			throw new Error("SATSolver.solve() requires at least one term");
+			throw new Error(`SATSolver.solve(): requires at least one term; has ${this.assignments.length}`);
 		}
 
 		// Find initial unit clauses (and later, pure literals).

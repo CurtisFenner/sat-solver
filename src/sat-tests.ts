@@ -1,5 +1,3 @@
-import { BigSATSolver } from "./big-sat.ts";
-import { ShiruSATSolver } from "./sat-shiru.ts";
 import type * as sat from "./sat\.ts";
 import { assert } from "./test.ts";
 
@@ -22,10 +20,10 @@ class Arithmetic {
 		this.eqConst([this.bitOne], 1);
 	}
 
-	solve() {
+	solve(): number[] | "unsatisfiable" {
 		const solution = this.sat.solve();
 		if (solution === "unsatisfiable") {
-			throw "unsatisfiable";
+			return "unsatisfiable";
 		}
 		this.solution = new Map();
 		for (const literal of solution) {
@@ -65,6 +63,16 @@ class Arithmetic {
 			const clause = [sign * a[i]];
 			this.sat.addClause(clause);
 		}
+	}
+
+	notEqConst(a: number[], v: number) {
+		const binary = v.toString(2);
+		const clause = [];
+		for (let i = 0; i < a.length; i++) {
+			const sign = binary[binary.length - 1 - i] === "1" ? 1 : -1;
+			clause.push(-sign * a[i]);
+		}
+		this.sat.addClause(clause);
 	}
 
 	implies(supposeLiterals: number[], concludeLiteral: number) {
@@ -164,6 +172,8 @@ export function differentialTest(p: {
 		const maximumTerm = Math.max(...clause.map(x => Math.abs(x)));
 		oracle.initTerms(maximumTerm);
 		oracle.addClause(clause);
+
+		underTest.initTerms(maximumTerm);
 		underTest.addClause(clause);
 	}
 
@@ -213,8 +223,45 @@ export function differentialTest(p: {
 	}
 }
 
-export function tests(factory: () => sat.SATSolver) {
-	return {
+function factoringProblem(
+	factory: () => sat.SATSolver,
+	setup: {
+		product: number,
+		factorBits: number,
+	},
+): "prime" | [number, number] {
+	const arithmetic = new Arithmetic(factory());
+
+	const alpha = arithmetic.vector(2 * setup.factorBits);
+	const beta = arithmetic.vector(2 * setup.factorBits);
+
+	const product = arithmetic.product(alpha, beta);
+	arithmetic.eqConst(product, setup.product);
+
+	// Only "half words".
+	arithmetic.eqConst(alpha.slice(setup.factorBits), 0);
+	arithmetic.eqConst(beta.slice(setup.factorBits), 0);
+
+	arithmetic.notEqConst(alpha.slice(0, setup.factorBits), 1);
+	arithmetic.notEqConst(beta.slice(0, setup.factorBits), 1);
+
+	const solved = arithmetic.solve();
+	if (solved === "unsatisfiable") {
+		return "prime";
+	}
+
+	const factored = [
+		arithmetic.readInt(alpha),
+		arithmetic.readInt(beta)
+	].sort((a, b) => a - b);
+
+	assert(arithmetic.readInt(product), "is equal to", setup.product);
+	assert(arithmetic.readInt(product), "is equal to", factored[0] * factored[1]);
+	return factored as [number, number];
+}
+
+export function tests(factory: () => sat.SATSolver, settings: { skip?: RegExp | RegExp[] } = {}) {
+	const testCases = {
 		"simple-satisfiable"() {
 			const sat = factory();
 			sat.initTerms(9);
@@ -290,50 +337,52 @@ export function tests(factory: () => sat.SATSolver) {
 			const result = sat.solve();
 			assert(result, "is equal to", "unsatisfiable");
 		},
-		"semiprime-factoring"() {
-			const arithmetic = new Arithmetic(factory());
-
-			const width = 20;
-			const alpha = arithmetic.vector(width);
-			const beta = arithmetic.vector(width);
-
-			const product = arithmetic.product(alpha, beta);
-
+		"semiprime-20-bit-factoring"() {
 			const factor1 = 811;
 			const factor2 = 839;
-			arithmetic.eqConst(product, factor1 * factor2);
 
-			// Only "half words".
-			arithmetic.eqConst(alpha.slice(width / 2), 0);
-			arithmetic.eqConst(beta.slice(width / 2), 0);
-
-			arithmetic.solve();
-
-			const factored = [
-				arithmetic.readInt(alpha),
-				arithmetic.readInt(beta)
-			].sort((a, b) => a - b);
-
-			assert(arithmetic.readInt(product), "is equal to", factor1 * factor2);
-			assert(factored, "is equal to", [factor1, factor2]);
-
+			const result = factoringProblem(factory, {
+				product: factor1 * factor2,
+				factorBits: 10,
+			});
+			assert(result, "is equal to", [factor1, factor2]);
 		},
+		"semiprime-24-bit-factoring"() {
+			const factor1 = 2243;
+			const factor2 = 3943;
+
+			const result = factoringProblem(factory, {
+				product: factor1 * factor2,
+				factorBits: 12,
+			});
+			assert(result, "is equal to", [factor1, factor2]);
+		},
+		// "semiprime-30-bit-factoring"() {
+		// 	const factor1 = 25117;
+		// 	const factor2 = 23879;
+
+		// 	const result = factoringProblem(factory, {
+		// 		product: factor1 * factor2,
+		// 		factorBits: 15,
+		// 	});
+		// 	assert(result, "is equal to", [factor1, factor2]);
+		// },
+		// "semiprime-40-bit-factoring"() {
+		// 	const factor1 = 578689;
+		// 	const factor2 = 846851;
+
+		// 	const result = factoringProblem(factory, {
+		// 		product: factor1 * factor2,
+		// 		factorBits: 20,
+		// 	});
+		// 	assert(result, "is equal to", [factor1, factor2]);
+		// },
 		"prime-testing"() {
-			const arithmetic = new Arithmetic(factory());
-
-			const width = 16;
-			const alpha = arithmetic.vector(width);
-			const beta = arithmetic.vector(width);
-
-			const product = arithmetic.product(alpha, beta);
-
-			arithmetic.eqConst(product, 7333);
-
-			// Only "half words".
-			arithmetic.eqConst(alpha.slice(width / 2), 0);
-			arithmetic.eqConst(beta.slice(width / 2), 0);
-
-			assert(() => arithmetic.solve(), "throws", "unsatisfiable");
+			const result = factoringProblem(factory, {
+				product: 7333,
+				factorBits: 8,
+			});
+			assert(result, "is equal to", "prime");
 		},
 		"clauses-with-repeated-literals"() {
 			// The solver must be able to tolerate clauses with repeated literals
@@ -423,6 +472,18 @@ export function tests(factory: () => sat.SATSolver) {
 			assert(Array.isArray(solution), "is equal to", true);
 		},
 	};
+
+	return Object.fromEntries(
+		Object.entries(testCases)
+			.filter(([key]) => {
+				if (!settings.skip) {
+					return true;
+				}
+				return Array.isArray(settings.skip)
+					? settings.skip.every(skip => !skip.test(key))
+					: !settings.skip.test(key);
+			}),
+	);
 }
 
 function randomLiteralForTerm(n: number): number {
@@ -465,7 +526,77 @@ function randomHard3SATInstance({ numTerms }: { numTerms: number }) {
 	return random3CNFInstance({ numTerms, numClauses });
 }
 
-export function reducingTests() {
+function instanceSize(instance: sat.Literal[][]): number {
+	let size = 0;
+	for (const clause of instance) {
+		size += 1 + clause.length;
+	}
+	return size;
+}
+
+function instanceReductions(instance: sat.Literal[][]): sat.Literal[][][] {
+	const reductions: sat.Literal[][][] = [];
+	for (let clauseIndex = 0; clauseIndex < instance.length; clauseIndex++) {
+		// Drop this clause
+		const instanceWithDroppedClause = instance.slice();
+		instanceWithDroppedClause.splice(clauseIndex, 1);
+		reductions.push(instanceWithDroppedClause);
+
+		// Drop each literal
+		const clause = instance[clauseIndex];
+		if (clause.length > 1) {
+			for (let k = 0; k < clause.length; k++) {
+				const copy = instance.slice();
+				copy[clauseIndex] = clause.slice();
+				copy[clauseIndex].splice(k, 1);
+				reductions.push(copy);
+			}
+		}
+	}
+	return reductions.filter(x => x.length > 0);
+}
+
+function reduceTestcase<T>(
+	testCase: (instance: T) => void,
+	instances: {
+		initial: T,
+		reducer: (instance: T) => T[],
+		sizer: (instance: T) => number,
+		maximum: number,
+	},
+) {
+	const failing: { instance: T, error: unknown }[] = [];
+
+	let queue: T[] = [instances.initial];
+	while (queue.length > 0) {
+		const instance = queue.pop()!;
+		try {
+			testCase(instance);
+		} catch (error) {
+			failing.push({ instance, error });
+			for (const reduction of instances.reducer(instance)) {
+				queue.push(reduction);
+			}
+		}
+
+		if (queue.length > instances.maximum) {
+			queue = queue
+				.sort((a, b) => instances.sizer(a) - instances.sizer(b))
+				.slice(0, instances.maximum);
+		}
+	}
+
+
+	const tuple = failing.sort((a, b) => instances.sizer(a.instance) - instances.sizer(b.instance))[0];
+	if (tuple) {
+		throw tuple.error;
+	}
+}
+
+export function reducingTests(targets: {
+	underTest: () => sat.SATSolver,
+	oracle: () => sat.SATSolver,
+}) {
 	const instances: Record<string, sat.Literal[][]> = {
 		// Manually reduced cases
 		"pure-literal-optimization-must-consider-unit-clauses-too": [
@@ -479,9 +610,18 @@ export function reducingTests() {
 			[-3, -4],
 			[4, 2],
 		],
+		larger: [
+			[3, -1],
+			[-1, -3],
+			[-4],
+			[-2],
+			[-5, 4, 2],
+			[-6, 5, 1],
+			[1, 6],
+		],
 	};
 
-	// Automatically generated cases
+	// Randomly generated cases
 	for (let numTerms = 4; numTerms < 80; numTerms++) {
 		const instance = randomHard3SATInstance({ numTerms });
 		const name = `numTerms=${numTerms}, numClauses=${instance.length}`;
@@ -491,15 +631,19 @@ export function reducingTests() {
 	const cases: Record<string, () => void> = {};
 	for (const [name, instance] of Object.entries(instances)) {
 		cases[name] = () => {
-			try {
-				differentialTest(
-					{ underTest: () => new BigSATSolver(), oracle: () => new ShiruSATSolver() },
-					instance,
-				);
-			} catch (err) {
-				console.log(JSON.stringify(instance));
-				throw err;
-			}
+			reduceTestcase(instance => {
+				try {
+					differentialTest(targets, instance);
+				} catch (err) {
+					console.log("failing instance:\n" + JSON.stringify(instance));
+					throw err;
+				}
+			}, {
+				initial: instance,
+				reducer: instanceReductions,
+				sizer: instanceSize,
+				maximum: 100,
+			});
 		}
 	}
 	return cases;

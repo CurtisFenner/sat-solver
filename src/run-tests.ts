@@ -18,8 +18,14 @@ const CONSOLE_WIDTH = 120;
 
 await testRunner.runSuites({
 	ShiruSATSolver: satTests.tests(() => new satShiru.ShiruSATSolver()),
-	// BigSATSolver: satTests.tests(() => new bigSat.BigSATSolver()),
-	reducingTests: satTests.reducingTests(),
+	BigSATSolver: satTests.tests(() => new bigSat.BigSATSolver(), {
+		// These tests are too slow!
+		skip: /prime/,
+	}),
+	reducingTests: satTests.reducingTests({
+		underTest: () => new bigSat.BigSATSolver(),
+		oracle: () => new satShiru.ShiruSATSolver(),
+	}),
 });
 
 const passed = testRunner.runs.filter(x => x.type == "pass");
@@ -34,6 +40,7 @@ function printRun(run: test.Run): void {
 }
 
 if (passed.length !== 0) {
+	console.log("");
 	console.log(util.styleText(["bgWhite", "black", "bold"], "-- Passed: ".padEnd(CONSOLE_WIDTH, "-")));
 }
 for (const pass of passed) {
@@ -41,10 +48,11 @@ for (const pass of passed) {
 }
 
 if (failed.length !== 0) {
+	console.log("");
 	console.log(util.styleText(["bgRed", "bold"], "-- Failed: ".padEnd(CONSOLE_WIDTH, "-")));
 }
 for (const failure of failed) {
-	console.log("\u{25be} ".repeat(CONSOLE_WIDTH / 2));
+	console.log("");
 	printRun(failure);
 	const indent = util.styleText(["bgRed"], "      ");
 	let exception: string;
@@ -57,7 +65,7 @@ for (const failure of failed) {
 		exception = `(${failure.exception.constructor.name}) ${exception}`;
 	}
 	console.log(indent + exception.replace(/\t/g, "    ").replace(/\n/g, "\n" + indent));
-	console.log(" \u{25b4}".repeat(CONSOLE_WIDTH / 2));
+	console.log("");
 }
 
 console.log("-".repeat(CONSOLE_WIDTH));
