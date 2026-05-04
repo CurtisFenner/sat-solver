@@ -1,0 +1,26 @@
+name: Build
+
+on:
+  push:
+    branches: "*"
+    tags: "v*"
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+    - uses: actions/setup-node@v6
+      with:
+          node-version: 24
+    - uses: pnpm/action-setup@v6
+    - run: pnpm install --frozen-lockfile
+    - run: pnpm run build
+    - run: pnpm run test
+    - name: Build publishable NPM artifact
+      run:
+        ./ci/build-publishable.sh "./publishable/" "${GITHUB_REF_NAME#v}"
+    - name: Test publishable NPM artifact
+      run:
+        npm install ../../publishable && tsc && node example.ts
+      working-directory: ./ci/test-publishable

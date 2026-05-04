@@ -16,11 +16,11 @@ class Arithmetic {
 		const bits = this.vector(2);
 		this.bitZero = bits[0];
 		this.bitOne = bits[1];
-		this.eqConst([this.bitZero], 0);
-		this.eqConst([this.bitOne], 1);
+		this.constrainEqToConstant([this.bitZero], 0);
+		this.constrainEqToConstant([this.bitOne], 1);
 	}
 
-	solve(): number[] | "unsatisfiable" {
+	solve(): sat.Literal[] | "unsatisfiable" {
 		const solution = this.sat.solve();
 		if (solution === "unsatisfiable") {
 			return "unsatisfiable";
@@ -32,7 +32,7 @@ class Arithmetic {
 		return solution;
 	}
 
-	readInt(v: number[]) {
+	readInt(v: number[]): number {
 		const solution = this.solution;
 		if (!solution) {
 			throw new Error("readInt: call solve() first");
@@ -45,9 +45,8 @@ class Arithmetic {
 		return parseInt(bits.join(""), 2);
 	}
 
-	vector(n: number) {
+	vector(n: number): sat.Term[] {
 		this.count += n;
-		this.sat.initTerms(this.count);
 		let out = [];
 		for (let i = 0; i < n; i++) {
 			out.push(this.count - i);
@@ -55,8 +54,17 @@ class Arithmetic {
 		return out;
 	}
 
-	/// Least significant bit first.
-	eqConst(a: number[], v: number) {
+	/**
+	 * Constrains the integer variable to be equal to the given on-negative
+	 * integer (modulo the bit-width of `a`).
+	 *
+	 * @param a is a fixed-width unsigned integer, with less-significant-bits
+	 *          occurring first in the array
+	 */
+	constrainEqToConstant(a: sat.Literal[], v: number | bigint): void {
+		if (v < 0n) {
+			throw new Error("Arithmetic.constrainEqToConstant: v must be non-negative");
+		}
 		const binary = v.toString(2);
 		for (let i = 0; i < a.length; i++) {
 			const sign = binary[binary.length - 1 - i] === "1" ? 1 : -1;
@@ -65,7 +73,18 @@ class Arithmetic {
 		}
 	}
 
-	notEqConst(a: number[], v: number) {
+	/**
+	 * Constrains the integer variable to be DISEQUAL to the given non-negative
+	 * integer (modulo the bit-width of `a`).
+	 *
+	 * @param a is a fixed-width unsigned integer, with less-significant-bits
+	 *          occurring first in the array
+	 */
+	constrainDisequalToConstant(a: number[], v: number | bigint): void {
+		v = BigInt(v);
+		if (v < 0n) {
+			throw new Error("Arithmetic.constrainDisequalToConstant: v must be non-negative");
+		}
 		const binary = v.toString(2);
 		const clause = [];
 		for (let i = 0; i < a.length; i++) {
@@ -75,14 +94,14 @@ class Arithmetic {
 		this.sat.addClause(clause);
 	}
 
-	implies(supposeLiterals: number[], concludeLiteral: number) {
+	implies(supposeLiterals: number[], concludeLiteral: number): void {
 		// (& supposeLiterals) => concludeLiteral
 		// ~(& supposeLiterals) or concludeLiteral
 		const clause = [concludeLiteral, ...supposeLiterals.map(x => -x)];
 		this.sat.addClause(clause);
 	}
 
-	table(inputs: number[], outputs: number[], table: number[][]) {
+	table(inputs: number[], outputs: number[], table: number[][]): void {
 		for (const row of table) {
 			const ant = [];
 			for (let i = 0; i < inputs.length; i++) {
@@ -96,8 +115,8 @@ class Arithmetic {
 		}
 	}
 
-	bitAdderEquation(a: number, b: number, cin: number, s: number, cout: number) {
-		this.table([a, b, cin], [cout, s], [
+	bitAdderEquation(a: number, b: number, cIn: number, s: number, cOut: number): void {
+		this.table([a, b, cIn], [cOut, s], [
 			[0, 0, 0, 0, 0],
 			[0, 0, 1, 0, 1],
 			[0, 1, 0, 0, 1],
@@ -109,11 +128,14 @@ class Arithmetic {
 		]);
 	}
 
-	/// Add an equation that a + b = sum.
-	/// Least significant bit first.
-	sum(a: number[], b: number[], sum: number[]) {
+	/**
+	 * Adds an equation constraining `a + b = sum`, where `a`, `b`, and `sum`
+	 * are interpreted as fixed-width integers, with less-significant-bits
+	 * appearing earlier in their bit-arrays.
+	 */
+	constrainSum(a: sat.Literal[], b: sat.Literal[], sum: sat.Literal[]): void {
 		if (a.length !== b.length || a.length !== sum.length) {
-			throw new Error("sum: bad call");
+			throw new Error("Arithmetic.constrainSum: bit-width of a, b, and sum must be the same");
 		}
 
 		let carry = this.bitZero;
@@ -124,24 +146,28 @@ class Arithmetic {
 		}
 	}
 
-	select(control: number, zero: number[], one: number[]): number[] {
-		if (zero.length !== one.length) {
+	select(
+		control: sat.Literal,
+		ifZero: sat.Literal[],
+		ifOne: sat.Literal[],
+	): sat.Literal[] {
+		if (ifZero.length !== ifOne.length) {
 			throw new Error("select: bad");
 		}
 
-		const alloc = this.vector(zero.length);
-		for (let i = 0; i < zero.length; i++) {
-			this.sat.addClause([-control, -one[i], alloc[i]]);
-			this.sat.addClause([-control, one[i], -alloc[i]]);
+		const alloc = this.vector(ifZero.length);
+		for (let i = 0; i < ifZero.length; i++) {
+			this.sat.addClause([-control, -ifOne[i], alloc[i]]);
+			this.sat.addClause([-control, ifOne[i], -alloc[i]]);
 
-			this.sat.addClause([control, -zero[i], alloc[i]]);
-			this.sat.addClause([control, zero[i], -alloc[i]]);
+			this.sat.addClause([control, -ifZero[i], alloc[i]]);
+			this.sat.addClause([control, ifZero[i], -alloc[i]]);
 		}
 
 		return alloc;
 	}
 
-	product(a: number[], b: number[]): number[] {
+	product(a: sat.Literal[], b: sat.Literal[]): sat.Literal[] {
 		// Perform "cross multiplication": repeatedly shift `b >> i` and add
 		// whenever `a[i]` is `1`.
 		b = b.slice(0);
@@ -154,13 +180,12 @@ class Arithmetic {
 			b = [this.bitZero, ...b.slice(0, b.length - 1)];
 			const shift = this.select(a[i], zeros, b);
 			const nextPartial = this.vector(b.length);
-			this.sum(partial, shift, nextPartial);
+			this.constrainSum(partial, shift, nextPartial);
 			partial = nextPartial;
 		}
 		return partial;
 	}
 }
-
 
 export function differentialTest(p: {
 	underTest: () => sat.SATSolver,
@@ -169,11 +194,7 @@ export function differentialTest(p: {
 	const oracle = p.oracle();
 	const underTest = p.underTest();
 	for (const clause of instance) {
-		const maximumTerm = Math.max(...clause.map(x => Math.abs(x)));
-		oracle.initTerms(maximumTerm);
 		oracle.addClause(clause);
-
-		underTest.initTerms(maximumTerm);
 		underTest.addClause(clause);
 	}
 
@@ -236,14 +257,14 @@ function factoringProblem(
 	const beta = arithmetic.vector(2 * setup.factorBits);
 
 	const product = arithmetic.product(alpha, beta);
-	arithmetic.eqConst(product, setup.product);
+	arithmetic.constrainEqToConstant(product, setup.product);
 
 	// Only "half words".
-	arithmetic.eqConst(alpha.slice(setup.factorBits), 0);
-	arithmetic.eqConst(beta.slice(setup.factorBits), 0);
+	arithmetic.constrainEqToConstant(alpha.slice(setup.factorBits), 0);
+	arithmetic.constrainEqToConstant(beta.slice(setup.factorBits), 0);
 
-	arithmetic.notEqConst(alpha.slice(0, setup.factorBits), 1);
-	arithmetic.notEqConst(beta.slice(0, setup.factorBits), 1);
+	arithmetic.constrainDisequalToConstant(alpha.slice(0, setup.factorBits), 1);
+	arithmetic.constrainDisequalToConstant(beta.slice(0, setup.factorBits), 1);
 
 	const solved = arithmetic.solve();
 	if (solved === "unsatisfiable") {
@@ -264,8 +285,6 @@ export function tests(factory: () => sat.SATSolver, settings: { skip?: RegExp | 
 	const testCases = {
 		"simple-satisfiable"() {
 			const sat = factory();
-			sat.initTerms(9);
-
 			const instance = [
 				[+7, +4, +6],
 				[+1, -7, +5],
@@ -296,7 +315,6 @@ export function tests(factory: () => sat.SATSolver, settings: { skip?: RegExp | 
 		},
 		"simple-unsatisfiable"() {
 			const sat = factory();
-			sat.initTerms(3);
 			sat.addClause([+1, +2, -3]);
 			sat.addClause([+1, -2, -3]);
 			sat.addClause([-1, +2, -3]);
@@ -308,7 +326,6 @@ export function tests(factory: () => sat.SATSolver, settings: { skip?: RegExp | 
 		},
 		"conflicting-unit-clauses"() {
 			const sat = factory();
-			sat.initTerms(1);
 			sat.addClause([+1]);
 			sat.addClause([-1]);
 			const model = sat.solve();
@@ -316,7 +333,6 @@ export function tests(factory: () => sat.SATSolver, settings: { skip?: RegExp | 
 		},
 		"conflict-in-initial-unit-propagation"() {
 			const sat = factory();
-			sat.initTerms(5);
 
 			// Initial unit propagation leads to a conflict.
 			const instance = [
@@ -426,7 +442,6 @@ export function tests(factory: () => sat.SATSolver, settings: { skip?: RegExp | 
 
 			const sat = factory();
 			for (const clause of clauses) {
-				sat.initTerms(Math.max(...clause.map(x => Math.abs(x))));
 				sat.addClause(clause);
 			}
 
@@ -438,33 +453,32 @@ export function tests(factory: () => sat.SATSolver, settings: { skip?: RegExp | 
 				// First, make a free decision of +1.
 				// Then, make a free decision of +2.
 				// Assignment stack is now [+1, +2].
-				[-2, -99],
-				[-2, 99],
+				[-2, -21],
+				[-2, 21],
 				// Learn clause [-2] as a result of the above conflict.
 				// Rollback.
 				// NOTE: you must rollback to decision level 0, NOT 1,
 				// since this new learned clause is a unit clause in level 0.
 				// Now propagate using -2 as asserting literal.
-				[2, -1, 98],
-				[2, -1, -98],
+				[2, -1, 20],
+				[2, -1, -20],
 				// Learn clause [-1] as a result of the above conflict.
 
 				// Artificially boost the term weight of 1 so that it is the first
 				// decision variable.
-				[1, 31],
-				[1, 32],
-				[1, 33],
-				[1, 34],
-				[1, 35],
-				[1, 36],
-				[2, 37],
-				[2, 38],
-				[2, 39],
+				[1, 11],
+				[1, 12],
+				[1, 13],
+				[1, 14],
+				[1, 15],
+				[1, 16],
+				[2, 17],
+				[2, 18],
+				[2, 19],
 			];
 
 			const sat = factory();
 			for (const clause of clauses) {
-				sat.initTerms(Math.max(...clause.map(x => Math.abs(x))));
 				sat.addClause(clause);
 			}
 
@@ -596,6 +610,7 @@ function reduceTestcase<T>(
 export function reducingTests(targets: {
 	underTest: () => sat.SATSolver,
 	oracle: () => sat.SATSolver,
+	numTerms?: number,
 }) {
 	const instances: Record<string, sat.Literal[][]> = {
 		// Manually reduced cases
@@ -622,7 +637,7 @@ export function reducingTests(targets: {
 	};
 
 	// Randomly generated cases
-	for (let numTerms = 4; numTerms < 80; numTerms++) {
+	for (let numTerms = 4; numTerms < (targets.numTerms ?? 80); numTerms++) {
 		const instance = randomHard3SATInstance({ numTerms });
 		const name = `numTerms=${numTerms}, numClauses=${instance.length}`;
 		instances[name] = instance;

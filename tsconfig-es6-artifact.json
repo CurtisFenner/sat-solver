@@ -1,0 +1,17 @@
+{
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"noEmit": false,
+		"outDir": "dist/es6",
+		"verbatimModuleSyntax": false,
+		"rewriteRelativeImportExtensions": true,
+		"allowImportingTsExtensions": false,
+		"module": "es6",
+		"types": [],
+		"declaration": true,
+		"declarationMap": true,
+	},
+	"include": [
+		"src/index.ts"
+	]
+}

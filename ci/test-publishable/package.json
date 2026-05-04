@@ -1,0 +1,6 @@
+{
+	"dependencies": {
+		"@curtisf/sat-solver": "*"
+	},
+	"type": "module"
+}
