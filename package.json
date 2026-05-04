@@ -1,4 +1,6 @@
 {
+	"name": "@curtisf/sat-solver",
+	"version": "*",
 	"scripts": {
 		"test": "node --trace-sigint --enable-source-maps src/run-tests.ts",
 		"build": "tsc"
@@ -13,10 +15,9 @@
 	},
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/CurtisFenner/sat-solver.git"
+		"url": "git+https://github.com/CurtisFenner/sat-solver.git"
 	},
 	"author": "Curtis Fenner",
-	"name": "@curtisf/sat-solver",
 	"type": "module",
 	"main": "es6/index.js",
 	"types": "es6/index.d.ts",

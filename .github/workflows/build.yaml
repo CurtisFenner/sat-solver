@@ -32,10 +32,8 @@ jobs:
         )}}
       if: github.ref_type == 'tag'
       run:
-          npm publish --public --provenance
+          npm publish --access public --provenance
       working-directory: ./publishable/
-      env:
-        NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
 
 permissions:
   id-token: write
