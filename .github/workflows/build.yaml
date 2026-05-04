@@ -22,5 +22,20 @@ jobs:
         ./ci/build-publishable.sh "./publishable/" "${GITHUB_REF_NAME#v}"
     - name: Test publishable NPM artifact
       run:
-        npm install ../../publishable && tsc && node example.ts
+        npm install ../../publishable/ && tsc && node example.ts
       working-directory: ./ci/test-publishable
+    - name: |-
+        ${{ case(
+          github.ref_type == 'tag',
+            format('Publish tag {0} to NPM', github.ref_name),
+          '(Skipping publish to NPM for non-tag event)'
+        )}}
+      if: github.ref_type == 'tag'
+      run:
+          npm publish --public --provenance
+      working-directory: ./publishable/
+      env:
+        NPM_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
+
+permissions:
+  id-token: write
