@@ -25,12 +25,6 @@ export type Term = number;
 export type SATResult = "unsatisfiable" | Literal[];
 
 export interface SATSolver {
-	/// Initializes the internal data-structures for terms 1, 2, ..., `term`
-	/// (if not already initialized).
-	/// Terms must be initialized before being used in clauses passed to
-	/// `addClause`.
-	initTerms(term: number): void;
-
 	/**
 	 * @returns the current (partial) assignment stack as an array of `Literal`s
 	 */

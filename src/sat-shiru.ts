@@ -190,10 +190,10 @@ export class ShiruSATSolver implements sat.SATSolver {
 	 */
 	private antecedentClause: (ClauseID | -1)[] = [];
 
-	/// Initializes the internal data-structures for terms 1, 2, ..., `term`
-	/// (if not already initialized).
-	/// Terms must be initialized before being used in clauses passed to
-	/// `addClause`.
+	/**
+	 * Initializes the internal data-structures for terms 1, 2, ..., `term`
+	 * (if not already initialized).
+	 */
 	initTerms(term: number) {
 		for (let i = this.assignments.length; i <= term; i++) {
 			this.assignments[i] = 0;
@@ -425,6 +425,7 @@ export class ShiruSATSolver implements sat.SATSolver {
 		for (let i = 0; i < unprocessedClause.length; i++) {
 			const literal = unprocessedClause[i];
 			const term = literal > 0 ? +literal : -literal;
+			this.initTerms(term);
 			if (this.assignments[term] === 0) {
 				hasUnassigned = true;
 			}

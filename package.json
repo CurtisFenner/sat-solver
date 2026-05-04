@@ -3,16 +3,22 @@
 		"test": "node --trace-sigint --enable-source-maps src/run-tests.ts",
 		"build": "tsc"
 	},
-	"dependencies": {
-		"@types/node": "^22.18.12"
-	},
 	"license": "LGPL-3.0-only",
 	"devDependencies": {
+		"@types/node": "^22.18.12",
 		"typescript": "^5.0.0"
 	},
 	"engines": {
 		"node": ">=22"
 	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/CurtisFenner/sat-solver.git"
+	},
+	"author": "Curtis Fenner",
+	"name": "@curtisf/sat-solver",
 	"type": "module",
-	"packageManager": "pnpm@10.11.1+sha512.e519b9f7639869dc8d5c3c5dfef73b3f091094b0a006d7317353c72b124e80e1afd429732e28705ad6bfa1ee879c1fce46c128ccebd3192101f43dd67c667912"
+	"main": "es6/index.js",
+	"types": "es6/index.d.ts",
+	"packageManager": "pnpm@10.33.2+sha512.a90faf6feeab71ad6c6e57f94e0fe1a12f5dcc22cd754db40ae9593eb6a3e0b6b12e3540218bb37ae083404b1f2ce6db2a4121e979829b4aff94b99f49da1cf8"
 }

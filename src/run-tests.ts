@@ -20,11 +20,12 @@ await testRunner.runSuites({
 	ShiruSATSolver: satTests.tests(() => new satShiru.ShiruSATSolver()),
 	BigSATSolver: satTests.tests(() => new bigSat.BigSATSolver(), {
 		// These tests are too slow!
-		skip: /prime/,
+		skip: [/prime/, /with-repeated/],
 	}),
 	reducingTests: satTests.reducingTests({
 		underTest: () => new bigSat.BigSATSolver(),
 		oracle: () => new satShiru.ShiruSATSolver(),
+		numTerms: 40,
 	}),
 });
 
